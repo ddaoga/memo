@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import type { MemoCategory, MemoLabel } from "../data/memos";
-import { clearDraft, readDraft, saveMemo, writeDraft, type Draft } from "../lib/memoStore";
+import { clearDraft, readDraft, writeDraft, type Draft } from "../lib/draftStore";
+import { createMemo } from "../memos/actions";
 import { useHydrated } from "../lib/useHydrated";
 import { ButtonPrimary } from "./ButtonPrimary";
 import { Chip } from "./Chip";
@@ -107,24 +108,27 @@ function WriteForm({ draft }: { draft: Draft | null }) {
     scheduleDraft();
   };
 
+  const [saving, startSaving] = useTransition();
+
+  // 저장하기: Supabase에 넣고, 성공하면 초안을 지우고 홈으로
   const onSave = () => {
+    if (saving) return;
     if (!title.trim()) {
       titleRef.current?.focus();
       return;
     }
-    const saved = saveMemo({
-      title: title.trim(),
-      category,
-      label,
-      body: editorRef.current ? htmlToBlocks(editorRef.current) : [],
+    const body = editorRef.current ? htmlToBlocks(editorRef.current) : [];
+    startSaving(async () => {
+      const result = await createMemo({ title: title.trim(), category, label, body });
+      if (!result.ok) {
+        window.alert(result.message);
+        return;
+      }
+      window.clearTimeout(saveTimer.current);
+      clearDraft();
+      router.replace("/");
+      router.refresh();
     });
-    if (!saved) {
-      window.alert("이 브라우저에 저장하지 못했어요. 저장 공간이나 개인 정보 보호 설정을 확인해 주세요.");
-      return;
-    }
-    window.clearTimeout(saveTimer.current);
-    clearDraft();
-    router.replace("/");
   };
 
   return (
@@ -229,7 +233,7 @@ function WriteForm({ draft }: { draft: Draft | null }) {
 
       {/* 내용이 길어 스크롤돼도 화면 아래에 붙어 있다 */}
       <div className="sticky bottom-0 bg-surface-page pt-8 pb-34">
-        <ButtonPrimary onClick={onSave} label="저장하기" />
+        <ButtonPrimary onClick={onSave} label={saving ? "저장하는 중…" : "저장하기"} />
       </div>
     </>
   );

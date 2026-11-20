@@ -156,6 +156,8 @@
   --color-label-pink: var(--label-pink);
   --color-label-pink-soft: var(--label-pink-soft);
 
+  /* 0은 토큰 값이 아니라 '없음'. min-w-0, bottom-0, inset-0 등이 동작하도록 둔다 */
+  --spacing-0: 0px;
   --spacing-4: var(--space-4);
   --spacing-8: var(--space-8);
   --spacing-12: var(--space-12);

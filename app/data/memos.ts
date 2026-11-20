@@ -1,7 +1,11 @@
-// Figma 시안(Mobile/Home, Mobile/Detail)의 예시 데이터. 저장 기능을 붙이면 실제 메모로 바꾼다.
+// 메모 데이터: Supabase memook 프로젝트의 public.memos 표
+import { supabase } from "../lib/supabase";
 
 export type MemoLabel = "blue" | "green" | "orange" | "pink";
 export type MemoCategory = "업무" | "개인" | "아이디어";
+
+export const MEMO_LABELS: MemoLabel[] = ["blue", "green", "orange", "pink"];
+export const MEMO_CATEGORIES: MemoCategory[] = ["업무", "개인", "아이디어"];
 
 /** 본문 글 조각. 문자열은 보통 글, { bold }는 굵게 강조. 줄바꿈은 "\n" */
 export type Inline = string | { bold: string };
@@ -12,114 +16,130 @@ export type Block =
   | { type: "paragraph"; content: Inline[] }
   | { type: "list"; items: string[] };
 
+/** 표의 한 줄 그대로 */
+type MemoRow = {
+  id: string;
+  title: string;
+  body: Block[];
+  category: MemoCategory;
+  label: MemoLabel;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+/** 화면에 보여 줄 모양 */
 export type Memo = {
   id: string;
   title: string;
   /** 홈 목록에 보이는 한 줄 미리보기 */
   preview: string;
-  /** 홈 목록 오른쪽 날짜 */
+  /** 홈 목록 오른쪽 날짜 (오늘 / 어제 / 11월 3일) */
   date: string;
   label: MemoLabel;
   category: MemoCategory;
-  pinned?: boolean;
-  /** 상세 화면 제목 위 날짜 */
+  pinned: boolean;
+  /** 상세 화면 제목 위 날짜 (11월 20일 오전 9:12) */
   createdAt: string;
-  /** 상세 화면 맨 아래 수정 시각 */
+  /** 상세 화면 맨 아래 수정 시각 (오늘 오전 9:12) */
   updatedAt: string;
   body: Block[];
 };
 
-export const today = "10월 30일 금요일";
-export const totalCount = 128;
+const COLUMNS = "id, title, body, category, label, pinned, created_at, updated_at";
 
-export const memos: Memo[] = [
-  {
-    id: "1",
-    title: "디자인 리뷰 회의록",
-    preview: "검수 기준과 다음 할 일 정리",
-    date: "오늘",
-    label: "blue",
-    category: "업무",
-    pinned: true,
-    createdAt: "10월 30일 오전 9:12",
-    updatedAt: "오늘 오전 9:12",
-    body: [
-      { type: "heading", text: "회의 요약" },
-      {
-        type: "paragraph",
-        content: ["시안 검수 기준을 팀 규칙으로 정리했다. 목표는 ", { bold: "AI가 구현해도 깨지지 않는 시안" }, "이다."],
-      },
-      { type: "subheading", text: "결정한 것" },
-      {
-        type: "list",
-        items: ["묶음은 오토레이아웃, 늘어날 것은 Fill", "색과 간격은 변수로 연결", "시안은 프레임 링크로 넘기기"],
-      },
-      { type: "subheading", text: "다음 할 일" },
-      {
-        type: "paragraph",
-        content: [{ bold: "금요일까지" }, " 각자 맡은 화면을 채점해 온다.\n점수보다 깎인 이유를 먼저 본다."],
-      },
-    ],
-  },
-  {
-    id: "2",
-    title: "주말 등산 준비",
-    preview: "물 두 병, 간식, 바람막이 챙기기",
-    date: "어제",
-    label: "green",
-    category: "개인",
-    pinned: true,
-    createdAt: "10월 29일",
-    updatedAt: "어제",
-    body: [{ type: "list", items: ["물 두 병", "간식", "바람막이"] }],
-  },
-  {
-    id: "3",
-    title: "장보기 목록",
-    preview: "우유, 계란, 사과, 커피 원두",
-    date: "오늘",
-    label: "pink",
-    category: "개인",
-    createdAt: "10월 30일",
-    updatedAt: "오늘",
-    body: [{ type: "list", items: ["우유", "계란", "사과", "커피 원두"] }],
-  },
-  {
-    id: "4",
-    title: "앱 아이콘 아이디어",
-    preview: "메모지 모서리가 접힌 모양",
-    date: "오늘",
-    label: "orange",
-    category: "아이디어",
-    createdAt: "10월 30일",
-    updatedAt: "오늘",
-    body: [{ type: "paragraph", content: ["메모지 모서리가 접힌 모양"] }],
-  },
-  {
-    id: "5",
-    title: "읽을 책",
-    preview: "디자인 시스템 책 두 권",
-    date: "어제",
-    label: "green",
-    category: "개인",
-    createdAt: "10월 29일",
-    updatedAt: "어제",
-    body: [{ type: "paragraph", content: ["디자인 시스템 책 두 권"] }],
-  },
-];
+/** 모든 메모, 최근에 고친 것부터 */
+export async function getMemos(): Promise<Memo[]> {
+  const { data, error } = await supabase.from("memos").select(COLUMNS).order("updated_at", { ascending: false });
+  if (error) throw new Error(`메모를 불러오지 못했어요: ${error.message}`);
+  const now = new Date();
+  return (data as MemoRow[]).map((row) => toMemo(row, now));
+}
 
-export function getMemo(id: string) {
-  return memos.find((m) => m.id === id);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 메모 하나. 없으면 null */
+export async function getMemo(id: string): Promise<Memo | null> {
+  if (!UUID.test(id)) return null;
+  const { data, error } = await supabase.from("memos").select(COLUMNS).eq("id", id).maybeSingle();
+  if (error) throw new Error(`메모를 불러오지 못했어요: ${error.message}`);
+  return data ? toMemo(data as MemoRow, new Date()) : null;
+}
+
+// ---------- 날짜 (한국 시간 기준) ----------
+
+const TIME_ZONE = "Asia/Seoul";
+
+function parts(d: Date) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: TIME_ZONE,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(d)
+      .map((x) => [x.type, x.value]),
+  );
+  return { y: +p.year, m: +p.month, d: +p.day, h: +p.hour, min: p.minute as string };
+}
+
+function timeLabel(d: Date) {
+  const { h, min } = parts(d);
+  return `${h < 12 ? "오전" : "오후"} ${h % 12 === 0 ? 12 : h % 12}:${min}`;
+}
+
+function dayLabel(d: Date, now: Date) {
+  const a = parts(d);
+  const b = parts(now);
+  const diff = Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86_400_000);
+  if (diff === 0) return "오늘";
+  if (diff === 1) return "어제";
+  return `${a.m}월 ${a.d}일`;
+}
+
+/** 홈 머리글 날짜: 11월 20일 목요일 */
+export function todayLabel(now = new Date()) {
+  return new Intl.DateTimeFormat("ko-KR", { timeZone: TIME_ZONE, month: "long", day: "numeric", weekday: "long" }).format(now);
+}
+
+// ---------- 변환 ----------
+
+function blockText(b: Block) {
+  if (b.type === "list") return b.items.join(", ");
+  if (b.type === "paragraph") return b.content.map((c) => (typeof c === "string" ? c : c.bold)).join("");
+  return b.text;
+}
+
+function toMemo(row: MemoRow, now: Date): Memo {
+  const created = new Date(row.created_at);
+  const updated = new Date(row.updated_at);
+  const body = Array.isArray(row.body) ? row.body : [];
+  // 미리보기는 본문(문단·목록)의 첫 줄, 없으면 제목·소제목
+  const firstText = (blocks: Block[]) => blocks.map(blockText).map((t) => t.replace(/\s+/g, " ").trim()).find(Boolean);
+  const preview = firstText(body.filter((b) => b.type === "paragraph" || b.type === "list")) ?? firstText(body) ?? "";
+  const c = parts(created);
+  return {
+    id: row.id,
+    title: row.title,
+    preview,
+    date: dayLabel(updated, now),
+    label: row.label,
+    category: row.category,
+    pinned: row.pinned,
+    createdAt: `${c.m}월 ${c.d}일 ${timeLabel(created)}`,
+    updatedAt: `${dayLabel(updated, now)} ${timeLabel(updated)}`,
+    body,
+  };
 }
 
 /** 본문 글자 수 (공백·줄바꿈 제외) */
 export function countChars(body: Block[]) {
-  const text = body
-    .map((b) => {
-      if (b.type === "list") return b.items.join("");
-      if (b.type === "paragraph") return b.content.map((c) => (typeof c === "string" ? c : c.bold)).join("");
-      return b.text;
-    })
-    .join("");
-  return text.replace(/\s/g, "").length;
+  return body
+    .map((b) => (b.type === "list" ? b.items.join("") : blockText(b)))
+    .join("")
+    .replace(/\s/g, "").length;
 }

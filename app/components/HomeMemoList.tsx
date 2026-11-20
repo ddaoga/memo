@@ -4,16 +4,13 @@ import { useState } from "react";
 import { CardHeader } from "./CardHeader";
 import { Chip } from "./Chip";
 import type { Memo, MemoCategory } from "../data/memos";
-import { useStoredMemos } from "../lib/memoStore";
 import { MemoItem } from "./MemoItem";
 
 const filters: ("전체" | MemoCategory)[] = ["전체", "업무", "개인", "아이디어"];
 
 /** 분류 칩 + 고정한 메모 카드 + 최근 메모 카드. 칩을 누르면 그 분류의 메모만 보인다 */
-export function HomeMemoList({ memos: sampleMemos }: { memos: Memo[] }) {
+export function HomeMemoList({ memos }: { memos: Memo[] }) {
   const [filter, setFilter] = useState<(typeof filters)[number]>("전체");
-  // 이 브라우저에 저장한 메모를 최근 메모 맨 위에
-  const memos = [...useStoredMemos(), ...sampleMemos];
   const visible = filter === "전체" ? memos : memos.filter((m) => m.category === filter);
   const pinned = visible.filter((m) => m.pinned);
   const recent = visible.filter((m) => !m.pinned);
